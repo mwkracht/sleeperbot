@@ -1,0 +1,10 @@
+version: '2.3'
+
+services:
+  develop:
+    build:
+      context: .
+    volumes:
+      - .:/app
+    entrypoint: /usr/bin/make
+    command: shell

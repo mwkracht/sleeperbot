@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "dynasty"
+version = "0.1.0"
+description = "My feeble attempt at using math to beat people in my dynasty fantasy football league..."
+authors = ["Matt Kracht <mwkracht@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[tool.poetry.group.dev.dependencies]
+click = "^8.1.3"
+
+[tool.poetry.scripts]
+dynasty_cli = 'dynasty.cli:main'
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
