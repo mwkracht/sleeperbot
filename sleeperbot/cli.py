@@ -4,12 +4,12 @@ import click
 
 
 @click.command()
-def dynasty_cli():
+def cli():
     click.echo('Hello :)')
 
 
 def main():
-    dynasty_cli()
+    return cli()
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
-# Dynasty
+# SleeperBot
 
-My feeble attempt at using math to beat people in my dynasty fantasy football league...
+My feeble attempt at automating management for a Sleeper dynasty football league.
 
 ## Development Mode
 

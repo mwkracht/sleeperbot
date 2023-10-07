@@ -1,8 +1,7 @@
-FROM python:3.10-bullseye
+FROM python:3.11-bullseye
 
 LABEL maintainer="Matt Kracht" \
-      email="mwkracht@gmail.com" \
-      description="Example containerized app which generates own configruation using consul-template"
+      email="mwkracht@gmail.com"
 
 RUN apt-get update && \
     apt-get install -y  \
