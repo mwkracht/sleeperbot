@@ -1,10 +1,24 @@
 version: '2.3'
 
 services:
+
   develop:
+    depends_on:
+      - 'redis'
     build:
       context: .
     volumes:
       - .:/app
     entrypoint: /usr/bin/make
     command: shell
+    environment:
+      SLEEPER_TOKEN: '${SLEEPER_TOKEN}'
+      SLEEPER_LEAGUE_ID: '${SLEEPER_LEAGUE_ID}'
+      REDIS_HOST: 'redis'
+      REDIS_PORT: '6379'
+
+  redis:
+    image: 'redis:latest'
+    command: 'redis-server'
+    expose:
+      - '6379'
