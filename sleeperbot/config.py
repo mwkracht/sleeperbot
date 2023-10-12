@@ -34,6 +34,8 @@ class Config:
     WEIGHT_KTC: float = load_from_env("WEIGHT_KTC", tipe=float, default=1.0)
     WEIGHT_FANTASY_CALC: float = load_from_env("WEIGHT_FANTASY_CALC", tipe=float, default=1.0)
 
+    MANAGE_ROSTER: bool = load_from_env("MANAGE_ROSTER", tipe=bool, default=False)
+
     @property
     def redis(self):
         if not hasattr(self, "_redis"):

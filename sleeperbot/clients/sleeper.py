@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 
 from sleeperbot.clients.session import Session
@@ -27,28 +28,34 @@ _graphql.headers.update(
 _rest = Session()
 
 
+def _check_graphql_errors(response) -> dict:
+    body = response.json()
+
+    if "errors" in body:
+        raise RuntimeError(body["errors"])
+
+    return body
+
+
 @memoize()
 def get_my_user_id() -> str:
     """Use the provided token to figure out the corresponding user ID"""
-    resp = _graphql.post(
-        "https://sleeper.com/graphql",
-        json={
-            "operationName": "initialize_app",
-            "variables": {},
-            "query": """
+    body = _check_graphql_errors(
+        _graphql.post(
+            "https://sleeper.com/graphql",
+            json={
+                "operationName": "initialize_app",
+                "variables": {},
+                "query": """
                 query initialize_app {
                     me {
                         user_id
                     }
                 }
             """,
-        },
+            },
+        )
     )
-
-    body = resp.json()
-
-    if "errors" in body:
-        raise RuntimeError(body["errors"])
 
     return body["data"]["me"]["user_id"]
 
@@ -111,6 +118,74 @@ def get_rosters() -> list[Roster]:
     return [map_roster(roster) for roster in _rosters]
 
 
+def update_roster(league: LeagueSettings, roster: Roster) -> Roster:
+    _check_graphql_errors(
+        _graphql.post(
+            "https://sleeper.com/graphql",
+            json={
+                "operationName": "roster_update_taxi",
+                "variables": {},
+                "query": """
+                mutation roster_update_taxi {{
+                    roster_update_taxi(league_id: "{LEAGUE_ID}",roster_id: {ROSTER_ID},taxi: {TAXI}){{
+                        league_id
+                    }}
+                }}
+            """.format(
+                    LEAGUE_ID=league.guid,
+                    ROSTER_ID=roster.guid,
+                    TAXI=json.dumps(roster.taxi),
+                ),
+            },
+        )
+    )
+
+    _check_graphql_errors(
+        _graphql.post(
+            "https://sleeper.com/graphql",
+            json={
+                "operationName": "roster_update_reserve",
+                "variables": {},
+                "query": """
+                mutation roster_update_reserve {{
+                    roster_update_reserve(league_id: "{LEAGUE_ID}",roster_id: {ROSTER_ID},reserve: {RESERVES}){{
+                        league_id
+                    }}
+                }}
+            """.format(
+                    LEAGUE_ID=league.guid,
+                    ROSTER_ID=roster.guid,
+                    RESERVES=json.dumps(roster.reserve),
+                ),
+            },
+        )
+    )
+
+    _check_graphql_errors(
+        _graphql.post(
+            "https://sleeper.com/graphql",
+            json={
+                "operationName": "update_matchup_leg",
+                "variables": {},
+                "query": """
+                mutation update_matchup_leg($starters_games: Map) {{
+                    update_matchup_leg(league_id: "{LEAGUE_ID}",roster_id: {ROSTER_ID},leg: {WEEK},round: {WEEK},starters: {STARTERS},starters_games: $starters_games){{
+                        league_id
+                    }}
+                }}
+            """.format(
+                    LEAGUE_ID=league.guid,
+                    ROSTER_ID=roster.guid,
+                    WEEK=league.week,
+                    STARTERS=json.dumps(roster.starters),
+                ),
+            },
+        )
+    )
+
+    return roster
+
+
 @memoize()
 def get_matchups(week: int) -> list[Matchup]:
     matchups = _rest.get(f"https://api.sleeper.app/v1/league/{_config.SLEEPER_LEAGUE_ID}/matchups/{str(week)}").json()
@@ -154,12 +229,13 @@ def get_player_map() -> dict[str, Player]:
 
 @memoize()
 def get_teams() -> list[Team]:
-    resp = _graphql.post(
-        "https://sleeper.com/graphql",
-        json={
-            "operationName": "teams",
-            "variables": {},
-            "query": """
+    body = _check_graphql_errors(
+        _graphql.post(
+            "https://sleeper.com/graphql",
+            json={
+                "operationName": "teams",
+                "variables": {},
+                "query": """
                 query teams {
                     teams(sport: "nfl") {
                         active
@@ -171,10 +247,9 @@ def get_teams() -> list[Team]:
                     }
                 }
             """,
-        },
+            },
+        )
     )
-
-    body = resp.json()
 
     if "errors" in body:
         raise RuntimeError(body["errors"])

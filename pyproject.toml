@@ -15,7 +15,8 @@ click = "^8.1.3"
 ipython = "^8.16.1"
 
 [tool.poetry.scripts]
-sleeperbot_cli = 'sleeperbot.cli:main'
+sleeperbot = 'sleeperbot.cli:main'
+manager = 'sleeperbot.manager:main'
 
 [build-system]
 requires = ["poetry-core"]

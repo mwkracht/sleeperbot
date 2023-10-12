@@ -94,15 +94,12 @@ class League:
             elif player.bye_week == self.settings.week:
                 sorted_players.remove(player)
 
-        # 2. Fill all starting positions that can only be filled by one roster position
-        lineup_positions = [
-            position for position in self.settings.roster_positions if len(LINEUP_POSITION_MAP.get(position, [])) == 1
-        ]
-
-        for lineup_position in lineup_positions:
-            starter = next(player for player in sorted_players if player.position == lineup_position)
-            starters.append(starter.guid)
-            sorted_players.remove(starter)
+        # 2. Fill all starting slots that can only be filled by one roster position
+        for position in self.settings.roster_positions:
+            if len(LINEUP_POSITION_MAP.get(position, [])) == 1:
+                starter = next(player for player in sorted_players if player.position == position)
+                starters.append(starter.guid)
+                sorted_players.remove(starter)
 
         # 3. Fill all flex positions that can be filled by multiple roster positions
         #    - starting with the flex spots which can be filled by the most positions
