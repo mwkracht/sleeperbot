@@ -4,15 +4,17 @@ from requests.adapters import (
     Retry,
 )
 
+DEFAULT_TIMEOUT = 5
+
 
 class Session(_Session):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         retry = Retry(
-            total=5,
+            total=3,
             backoff_factor=0.1,
-            status_forcelist=[500, 502, 503, 504],
+            status_forcelist=[429, 500, 502, 503, 504],
         )
 
         self.mount("http://", HTTPAdapter(max_retries=retry))
@@ -24,6 +26,9 @@ class Session(_Session):
         self.headers.update({"Connection": "close"})
 
     def request(self, *args, **kwargs):
+        timeout = kwargs.pop("timeout", DEFAULT_TIMEOUT)
+        kwargs["timeout"] = timeout
+
         response = super().request(*args, **kwargs)
         response.raise_for_status()
 

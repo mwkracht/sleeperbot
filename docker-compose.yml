@@ -7,15 +7,19 @@ services:
       - 'redis'
     build:
       context: .
+      dockerfile: Dockerfile
+      target: develop
     volumes:
-      - .:/app
-    entrypoint: /usr/bin/make
-    command: shell
+      - .:/var/task
+    entrypoint: /bin/bash -c
+    command: bash
     environment:
       SLEEPER_TOKEN: '${SLEEPER_TOKEN}'
       SLEEPER_LEAGUE_ID: '${SLEEPER_LEAGUE_ID}'
       REDIS_HOST: 'redis'
       REDIS_PORT: '6379'
+      LOG_LEVEL: 'debug'
+      LOG_CONSOLE: 'true'
 
   redis:
     image: 'redis:latest'

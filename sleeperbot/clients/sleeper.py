@@ -1,9 +1,10 @@
 import json
 from collections import defaultdict
 
+from sleeperbot import config
 from sleeperbot.clients.session import Session
-from sleeperbot.config import Config
 from sleeperbot.models import (
+    Game,
     LeagueSettings,
     Matchup,
     Owner,
@@ -13,15 +14,13 @@ from sleeperbot.models import (
 )
 from sleeperbot.utils import memoize
 
-_config = Config()
-
 _graphql = Session()
 _graphql.headers.update(
     {
         "Accept": "application/json",
         "Accept-Language": "en-US,en;q=0.9",
         "Content-Type": "application/json",
-        "Authorization": _config.SLEEPER_TOKEN,
+        "Authorization": config.SLEEPER_TOKEN,
     }
 )
 
@@ -63,10 +62,10 @@ def get_my_user_id() -> str:
 @memoize()
 def get_league_settings() -> LeagueSettings:
     nfl_state = _rest.get("https://api.sleeper.app/v1/state/nfl").json()
-    league_state = _rest.get(f"https://api.sleeper.app/v1/league/{_config.SLEEPER_LEAGUE_ID}").json()
+    league_state = _rest.get(f"https://api.sleeper.app/v1/league/{config.SLEEPER_LEAGUE_ID}").json()
 
     return LeagueSettings(
-        guid=_config.SLEEPER_LEAGUE_ID,
+        guid=config.SLEEPER_LEAGUE_ID,
         name=league_state["name"],
         status=league_state["status"],
         week=int(nfl_state["leg"]),
@@ -88,7 +87,7 @@ def get_owners() -> list[Owner]:
             avatar=user["avatar"],
         )
 
-    _users = _rest.get(f"https://api.sleeper.app/v1/league/{_config.SLEEPER_LEAGUE_ID}/users").json()
+    _users = _rest.get(f"https://api.sleeper.app/v1/league/{config.SLEEPER_LEAGUE_ID}/users").json()
 
     return [map_owner(user) for user in _users]
 
@@ -113,12 +112,12 @@ def get_rosters() -> list[Roster]:
             player_ids=roster["players"],
         )
 
-    _rosters = _rest.get(f"https://api.sleeper.app/v1/league/{_config.SLEEPER_LEAGUE_ID}/rosters").json()
+    _rosters = _rest.get(f"https://api.sleeper.app/v1/league/{config.SLEEPER_LEAGUE_ID}/rosters").json()
 
     return [map_roster(roster) for roster in _rosters]
 
 
-def update_roster(league: LeagueSettings, roster: Roster) -> Roster:
+def update_taxi(league: LeagueSettings, roster: Roster):
     _check_graphql_errors(
         _graphql.post(
             "https://sleeper.com/graphql",
@@ -140,6 +139,8 @@ def update_roster(league: LeagueSettings, roster: Roster) -> Roster:
         )
     )
 
+
+def update_injured_reserve(league: LeagueSettings, roster: Roster):
     _check_graphql_errors(
         _graphql.post(
             "https://sleeper.com/graphql",
@@ -161,6 +162,8 @@ def update_roster(league: LeagueSettings, roster: Roster) -> Roster:
         )
     )
 
+
+def update_starters(league: LeagueSettings, roster: Roster) -> Roster:
     _check_graphql_errors(
         _graphql.post(
             "https://sleeper.com/graphql",
@@ -188,7 +191,7 @@ def update_roster(league: LeagueSettings, roster: Roster) -> Roster:
 
 @memoize()
 def get_matchups(week: int) -> list[Matchup]:
-    matchups = _rest.get(f"https://api.sleeper.app/v1/league/{_config.SLEEPER_LEAGUE_ID}/matchups/{str(week)}").json()
+    matchups = _rest.get(f"https://api.sleeper.app/v1/league/{config.SLEEPER_LEAGUE_ID}/matchups/{str(week)}").json()
 
     # matchups are singular by matchup_id can be used to group the pairs
     _matchups: dict[str, list] = defaultdict(list)
@@ -228,6 +231,44 @@ def get_player_map() -> dict[str, Player]:
 
 
 @memoize()
+def get_games() -> dict[str, Game]:
+    league_settings = get_league_settings()
+
+    body = _check_graphql_errors(
+        _graphql.post(
+            "https://sleeper.com/graphql",
+            json={
+                "operationName": "batch_scores",
+                "variables": {},
+                "query": """
+                    query batch_scores {{
+                        scores(sport: "nfl",season_type: "regular",season: "{SEASON}",week: {WEEK}){{
+                            date
+                            game_id
+                            metadata
+                            status
+                            start_time
+                        }}
+                    }}
+                """.format(SEASON=league_settings.season, WEEK=league_settings.week),
+            },
+        )
+    )
+
+    def map_game(game) -> Game:
+        return Game(
+            guid=game["game_id"],
+            start_time=game["start_time"],
+            teams=[game["metadata"]["home_team"], game["metadata"]["away_team"]],
+            status=game["status"],
+        )
+
+    games = [map_game(game) for game in body["data"]["scores"]]
+
+    return {team: game for game in games for team in game.teams}
+
+
+@memoize()
 def get_teams() -> list[Team]:
     body = _check_graphql_errors(
         _graphql.post(
@@ -236,25 +277,29 @@ def get_teams() -> list[Team]:
                 "operationName": "teams",
                 "variables": {},
                 "query": """
-                query teams {
-                    teams(sport: "nfl") {
-                        active
-                        aliases
-                        metadata
-                        name
-                        sport
-                        team
+                    query teams {
+                        teams(sport: "nfl") {
+                            active
+                            aliases
+                            metadata
+                            name
+                            sport
+                            team
+                        }
                     }
-                }
             """,
             },
         )
     )
 
-    if "errors" in body:
-        raise RuntimeError(body["errors"])
+    games = get_games()
 
     def map_team(team) -> Team:
-        return Team(guid=team["team"], name=team["name"], bye_week=int(team["metadata"]["bye_week"]))
+        return Team(
+            guid=team["team"],
+            name=team["name"],
+            bye_week=int(team["metadata"]["bye_week"]),
+            game=games.get(team["team"]),
+        )
 
     return [map_team(team) for team in body["data"]["teams"]]

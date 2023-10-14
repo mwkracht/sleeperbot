@@ -1,9 +1,18 @@
+from datetime import datetime
+
+import structlog
+
 from sleeperbot.clients import (
     fantasy_calc,
     ktc,
     sleeper,
 )
-from sleeperbot.models import Roster
+from sleeperbot.models import (
+    Player,
+    Roster,
+)
+
+log = structlog.get_logger()
 
 # keys are roster positions that can be included in a starting
 # lineup mapped to the roster positions that can fill that slot
@@ -18,9 +27,9 @@ LINEUP_POSITION_MAP = {
 
 class League:
     def __init__(self):
-        my_user_id = sleeper.get_my_user_id()
         self.owners = {owner.guid: owner for owner in sleeper.get_owners()}
 
+        my_user_id = sleeper.get_my_user_id()
         self.me = self.owners[my_user_id]
 
         self.settings = sleeper.get_league_settings()
@@ -77,45 +86,66 @@ class League:
             raise RuntimeError("Unable to map all ktc player values!")
 
     def optimize_roster(self, roster: Roster):
-        starters: list[str] = []
+        # the order of the IDs matches the order of self.settings.roster_positions - so if QB
+        # is the first position in roster_positions then the first ID in starters must be a QB
+        # or "0" which represents an empty position
+        starters: list[str] = ["0"] * self.settings.starter_slots
+        bench: list[str] = []
         reserve: list[str] = []
+        taxi: list[str] = roster.taxi.copy()  # don't touch the taxi squad for now...
+        movable_players: dict[str, Player] = {}
 
-        sorted_players = sorted(roster.players, key=lambda player: player.redraft, reverse=True)
-
-        # 1. Remove IR, Taxi, and players on bye
         for player in roster.players:
-            if player.guid in roster.taxi:
-                sorted_players.remove(player)
+            if player.guid in taxi:
+                continue
 
-            elif player.status == "Inactive" and len(reserve) < self.settings.reserve_slots:
+            if player.team in self.teams and self.teams[player.team].game:
+                if self.teams[player.team].game.kickoff > datetime.utcnow():
+                    movable_players[player.guid] = player
+                elif player.guid in roster.starters:
+                    starters[roster.starters.index(player.guid)] = player.guid
+                elif player.guid in roster.bench:
+                    bench.append(player.guid)
+                elif player.guid in roster.reserve:
+                    reserve.append(player.guid)
+            else:
+                movable_players[player.guid] = player
+
+        # move players to IR and bye week/out players to the bench
+        for player in list(movable_players.values()):
+            if player.on_reserve and len(reserve) < self.settings.reserve_slots:
                 reserve.append(player.guid)
-                sorted_players.remove(player)
+                movable_players.pop(player.guid)
 
-            elif player.bye_week == self.settings.week:
-                sorted_players.remove(player)
+            elif not player.will_play:  # player is out this week
+                bench.append(player.guid)
+                movable_players.pop(player.guid)
 
-        # 2. Fill all starting slots that can only be filled by one roster position
-        for position in self.settings.roster_positions:
-            if len(LINEUP_POSITION_MAP.get(position, [])) == 1:
-                starter = next(player for player in sorted_players if player.position == position)
-                starters.append(starter.guid)
-                sorted_players.remove(starter)
+            elif player.bye_week == self.settings.week:  # player is on bye this week
+                bench.append(player.guid)
+                movable_players.pop(player.guid)
 
-        # 3. Fill all flex positions that can be filled by multiple roster positions
-        #    - starting with the flex spots which can be filled by the most positions
-        flex_positions = sorted(
-            [position for position in self.settings.roster_positions if len(LINEUP_POSITION_MAP.get(position, [])) > 1],
-            key=lambda position: len(LINEUP_POSITION_MAP[position]),
-            reverse=True,
-        )
+            elif not player.team:  # player is a free agent...
+                bench.append(player.guid)
+                movable_players.pop(player.guid)
 
-        for flex_position in flex_positions:
-            starter = next(player for player in sorted_players if player.position in LINEUP_POSITION_MAP[flex_position])
-            starters.append(starter.guid)
-            sorted_players.remove(starter)
+        sorted_players = sorted(movable_players.values(), key=lambda player: player.redraft, reverse=True)
 
-        # 4. Fill out bench
-        bench = [p.guid for p in sorted_players]
+        # fill out open starter slots with most value player that fits that position
+        for idx, slot in enumerate(starters):
+            if slot != "0":
+                continue
+
+            position = self.settings.roster_positions[idx]
+            available_fills = LINEUP_POSITION_MAP[position]
+
+            player = next(player for player in sorted_players if player.position in available_fills)
+            movable_players.pop(player.guid)
+            sorted_players.remove(player)
+            starters[idx] = player.guid
+
+        # all remaining movable players go to bench
+        bench.extend(list(movable_players.keys()))
 
         return Roster(
             guid=roster.guid,
@@ -124,7 +154,5 @@ class League:
             reserve=reserve,
             bench=bench,
             players=roster.players,
-            # touching taxi squad should not be done as part of roster optimization
-            # since there are very explicit rules/times when taxi players can be added
-            taxi=roster.taxi,
+            taxi=taxi,
         )

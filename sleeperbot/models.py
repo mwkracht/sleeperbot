@@ -4,13 +4,13 @@ from dataclasses import (
     dataclass,
     field,
 )
+from datetime import datetime
 
-from sleeperbot.config import Config
+from sleeperbot import config
 
 GUID = str
 
 _registry = {}
-_config = Config()
 
 
 class Model:
@@ -49,12 +49,12 @@ class PlayerValue(Model):
         only = only or ["fantasy_calc", "ktc"]
 
         if "ktc" in only and self.values.get("ktc") is not None:
-            value_num += _config.WEIGHT_KTC * self.values["ktc"]
-            value_denom += _config.WEIGHT_KTC * 1
+            value_num += config.WEIGHT_KTC * self.values["ktc"]
+            value_denom += config.WEIGHT_KTC * 1
 
         if "fantasy_calc" in only and self.values.get("fantasy_calc") is not None:
-            value_num += _config.WEIGHT_FANTASY_CALC * self.values["fantasy_calc"]
-            value_denom += _config.WEIGHT_FANTASY_CALC * 1
+            value_num += config.WEIGHT_FANTASY_CALC * self.values["fantasy_calc"]
+            value_denom += config.WEIGHT_FANTASY_CALC * 1
 
         if not value_denom:
             return 0
@@ -126,6 +126,14 @@ class Player(Model):
         return f"{self.first_name} {self.last_name}"
 
     @property
+    def on_reserve(self):
+        return self.status == "Inactive"
+
+    @property
+    def will_play(self):
+        return self.status == "Active" and self.injury_status in (None, "Questionable")
+
+    @property
     def alternate_id(self):
         """
         Not every service will have sleeper GUIDs for players. In that case
@@ -164,11 +172,27 @@ class Matchup(Model):
 
 
 @dataclass(repr=False)
+class Game(Model):
+    guid: GUID
+    start_time: int
+    teams: list[str]
+
+    # pre_game
+    # in_game
+    # complete
+    status: str
+
+    @property
+    def kickoff(self) -> datetime:
+        return datetime.utcfromtimestamp(self.start_time / 1000)
+
+
+@dataclass(repr=False)
 class Team(Model):
     guid: GUID
-
     name: str
     bye_week: int
+    game: Game | None = None
 
 
 @dataclass(repr=False)
@@ -198,12 +222,16 @@ class LeagueSettings(Model):
     ppr: float
 
     @property
-    def superflex(self):
-        return self.roster_positions.count("QB") > 1
+    def bench_slots(self):
+        return self.roster_positions.count("BN")
 
     @property
-    def supported_positions(self):
-        return set(self.roster_positions) - {"BN", "FLEX"}
+    def starter_slots(self):
+        return len(self.roster_positions) - self.bench_slots
+
+    @property
+    def superflex(self):
+        return self.roster_positions.count("QB") > 1
 
 
 def serialize(value, *args, **kwargs):
