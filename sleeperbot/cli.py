@@ -33,7 +33,7 @@ def optimize_roster(owner_id: str):
         display_names = [owner.display_name for owner in league.owners.values()]
         raise click.BadParameter(f"possible owners: {display_names}", param_hint="owner_id")
 
-    optimal_roster = league.optimize_roster(owner.roster)
+    optimal_roster, drop = league.optimize_roster(owner.roster)
 
     def print_roster(players):
         def print_players(players):
@@ -43,14 +43,13 @@ def optimize_roster(owner_id: str):
 
         print_players([league.players[p_id] for p_id in players])
 
-    click.secho("\n-- Starters Before --", fg="yellow")
-    print_roster(owner.roster.starters)
-    click.secho("\n-- Starters After --", fg="yellow")
-    print_roster(optimal_roster.starters)
+    if drop:
+        click.secho("\n-- Players to Drop --", fg="red")
+        print_roster(drop)
 
-    if click.confirm("\nDo you want to apply changes to starters?"):
-        sleeper.update_starters(league.settings, league.me.roster)
-        click.secho("Starters applied", fg="green")
+        if click.confirm("\nDo you want to drop players?"):
+            sleeper.drop_players(league.settings, owner.roster, drop)
+            click.secho("Players dropped", fg="green")
 
     click.secho("\n-- IR Before--", fg="yellow")
     print_roster(owner.roster.reserve)
@@ -60,6 +59,15 @@ def optimize_roster(owner_id: str):
     if click.confirm("\nDo you want to apply changes to injured reserve?"):
         sleeper.update_injured_reserve(league.settings, league.me.roster)
         click.secho("Injured reserve applied", fg="green")
+
+    click.secho("\n-- Starters Before --", fg="yellow")
+    print_roster(owner.roster.starters)
+    click.secho("\n-- Starters After --", fg="yellow")
+    print_roster(optimal_roster.starters)
+
+    if click.confirm("\nDo you want to apply changes to starters?"):
+        sleeper.update_starters(league.settings, league.me.roster)
+        click.secho("Starters applied", fg="green")
 
     click.secho("\n-- Taxi Before --", fg="yellow")
     print_roster(owner.roster.taxi)

@@ -220,6 +220,7 @@ class LeagueSettings(Model):
     taxi_slots: int
     reserve_slots: int
     ppr: float
+    te_ppr: float
 
     @property
     def bench_slots(self):

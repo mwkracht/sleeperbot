@@ -85,7 +85,7 @@ class League:
         if len(d_players) > 0:
             raise RuntimeError("Unable to map all ktc player values!")
 
-    def optimize_roster(self, roster: Roster):
+    def optimize_roster(self, roster: Roster) -> tuple[Roster, list[str]]:
         # the order of the IDs matches the order of self.settings.roster_positions - so if QB
         # is the first position in roster_positions then the first ID in starters must be a QB
         # or "0" which represents an empty position
@@ -93,6 +93,8 @@ class League:
         bench: list[str] = []
         reserve: list[str] = []
         taxi: list[str] = roster.taxi.copy()  # don't touch the taxi squad for now...
+        drop: list[str] = []
+
         movable_players: dict[str, Player] = {}
 
         for player in roster.players:
@@ -147,7 +149,18 @@ class League:
         # all remaining movable players go to bench
         bench.extend(list(movable_players.keys()))
 
-        return Roster(
+        if len(bench) > self.settings.bench_slots:
+            # must drop players from roster to get roster size corrected - drop players based on
+            # lowest dynasty value
+            bench_players = [self.players[player_id] for player_id in bench]
+            bench_players = sorted(bench_players, key=lambda player: player.dynasty, reverse=True)
+
+            drop_players = bench_players[-(len(bench) - self.settings.bench_slots) :]
+            for player in drop_players:
+                bench.remove(player.guid)
+                drop.append(player.guid)
+
+        optimal_roster = Roster(
             guid=roster.guid,
             owners=roster.owners,
             starters=starters,
@@ -156,3 +169,5 @@ class League:
             players=roster.players,
             taxi=taxi,
         )
+
+        return optimal_roster, drop

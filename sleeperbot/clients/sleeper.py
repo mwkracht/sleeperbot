@@ -64,6 +64,9 @@ def get_league_settings() -> LeagueSettings:
     nfl_state = _rest.get("https://api.sleeper.app/v1/state/nfl").json()
     league_state = _rest.get(f"https://api.sleeper.app/v1/league/{config.SLEEPER_LEAGUE_ID}").json()
 
+    ppr = league_state["scoring_settings"]["rec"]
+    te_ppr = ppr + (league_state["scoring_settings"].get("bonus_rec_te") or 0)
+
     return LeagueSettings(
         guid=config.SLEEPER_LEAGUE_ID,
         name=league_state["name"],
@@ -74,7 +77,8 @@ def get_league_settings() -> LeagueSettings:
         roster_positions=league_state["roster_positions"],
         taxi_slots=league_state["settings"]["taxi_slots"],
         reserve_slots=league_state["settings"]["reserve_slots"],
-        ppr=league_state["scoring_settings"]["rec"],
+        ppr=ppr,
+        te_ppr=te_ppr,
     )
 
 
@@ -115,6 +119,46 @@ def get_rosters() -> list[Roster]:
     _rosters = _rest.get(f"https://api.sleeper.app/v1/league/{config.SLEEPER_LEAGUE_ID}/rosters").json()
 
     return [map_roster(roster) for roster in _rosters]
+
+
+def drop_players(league: LeagueSettings, roster: Roster, player_ids: list[str]):
+    _check_graphql_errors(
+        _graphql.post(
+            "https://sleeper.com/graphql",
+            json={
+                "operationName": "league_create_transaction",
+                "variables": {
+                    "k_adds": [],
+                    "v_adds": [],
+                    "k_drops": player_ids,
+                    "v_drops": [int(roster.guid)],
+                },
+                "query": """
+            mutation league_create_transaction($k_adds: [String], $v_adds: [Int], $k_drops: [String], $v_drops: [Int]) {{
+                league_create_transaction(league_id: "{LEAGUE_ID}", type: "free_agent", k_adds: $k_adds, v_adds: $v_adds, k_drops: $k_drops, v_drops: $v_drops){{
+                    adds
+                    consenter_ids
+                    created
+                    creator
+                    drops
+                    league_id
+                    leg
+                    metadata
+                    roster_ids
+                    settings
+                    status
+                    status_updated
+                    transaction_id
+                    type
+                    player_map
+                }}
+            }}
+            """.format(
+                    LEAGUE_ID=league.guid,
+                ),
+            },
+        )
+    )
 
 
 def update_taxi(league: LeagueSettings, roster: Roster):

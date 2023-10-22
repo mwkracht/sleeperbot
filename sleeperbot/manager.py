@@ -28,14 +28,20 @@ def manage():
     log.info("running sleeperbot manager")
     league = League()
 
-    league.me.roster = league.optimize_roster(league.me.roster)
+    if config.MANAGE_ROSTER:
+        league.me.roster, drop_players = league.optimize_roster(league.me.roster)
 
-    if config.MANAGE_STARTERS:
-        sleeper.update_starters(league, league.me.roster)
-    if config.MANAGE_TAXI:
-        sleeper.update_taxi(league, league.me.roster)
-    if config.MANAGE_INJURED_RESERVE:
+        if drop_players:
+            # sleeper requires all non-IR illegible players to be moved from IR and
+            # roster size to be correct before starters can be adjusted
+            sleeper.drop_players(league.settings, league.me.roster, drop_players)
+
         sleeper.update_injured_reserve(league, league.me.roster)
+
+        sleeper.update_starters(league, league.me.roster)
+
+        if config.MANAGE_TAXI:
+            sleeper.update_taxi(league, league.me.roster)
 
     log.info("sleeperbot manager complete")
 

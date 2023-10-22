@@ -43,8 +43,7 @@ class Config:
     WEIGHT_KTC: float = load_from_env("WEIGHT_KTC", tipe=float, default=1.0)
     WEIGHT_FANTASY_CALC: float = load_from_env("WEIGHT_FANTASY_CALC", tipe=float, default=1.0)
 
-    MANAGE_STARTERS: bool = load_from_env("MANAGE_STARTERS", tipe=bool, default=False)
-    MANAGE_INJURED_RESERVE: bool = load_from_env("MANAGE_INJURED_RESERVE", tipe=bool, default=False)
+    MANAGE_ROSTER: bool = load_from_env("MANAGE_ROSTER", tipe=bool, default=False)
     MANAGE_TAXI: bool = load_from_env("MANAGE_TAXI", tipe=bool, default=False)
 
     LOG_LEVEL: str = load_from_env("LOG_LEVEL", tipe=str, default="INFO")

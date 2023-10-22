@@ -78,7 +78,7 @@ def _get_players(url) -> list[dict]:
     matches = list(re.finditer(r"var playersArray = (.*);", response.text, re.MULTILINE))
 
     if len(matches) != 1:
-        raise RuntimeError(f"Found {len(matches)} regex matches for keeptradecut source!")
+        raise RuntimeError(f"Found {len(matches)} regex matches for keeptradecut players array!")
 
     return json.loads(matches[0].groups()[0])
 
@@ -95,17 +95,29 @@ def get_players(dynasty: bool, settings: LeagueSettings) -> list[Player]:
             first_name=first,
             last_name=last,
             position=player["position"],
-            number=player["number"],  # ktc also seems to hav esome wrong player numbers...
+            number=player["number"],  # ktc also seems to have some wrong player numbers...
             team=TEAM_MAPPING.get(player["team"], player["team"]),  # and some teams wrong...
-            bye_week=int(player["byeWeek"] or -1),
+            bye_week=int(player.get("byeWeek") or -1),
         )
 
         values = player.get("superflexValues") if settings.superflex else player.get("oneQBValues")
+        trend = _normalize_value(values["overall7DayTrend"])  # only lives on base values dict
+
+        te_premium = settings.te_ppr - settings.ppr
+        te_positions = settings.roster_positions.count("TE")
+
+        if te_positions > 1 and te_premium > 0.75:
+            values = values.get("teppp")
+        elif te_positions > 1 or te_premium > 0.75:
+            values = values.get("tepp")
+        elif 0.5 <= te_premium <= 0.75:
+            values = values.get("tep")
+
         values = values or {}
 
         player_value = PlayerValue(
             values={"ktc": _normalize_value(values["value"])},
-            trends={"ktc": _normalize_value(values["overall7DayTrend"])},
+            trends={"ktc": trend},
         )
 
         if dynasty:
